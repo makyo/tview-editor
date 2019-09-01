@@ -8,9 +8,11 @@ import (
 )
 
 const (
-	cursor = "\u200b"
-	selTag = `["selection"]`
+	cursor = "\u2002"
+	lTag   = `["left"]`
+	rTag   = `["right"]`
 	curTag = `["cursor"]`
+	selTag = `["selection"]`
 	endTag = `[""]`
 )
 
@@ -18,12 +20,9 @@ type handlerFunc func(*tcell.EventKey) *tcell.EventKey
 
 type Editor struct {
 	*tview.TextView
-	cursorX     int
-	cursorY     int
-	cursorIndex int
-	handlers    []handlerFunc
-	selectable  bool
-	lines       []string
+	handlers   []handlerFunc
+	selectable bool
+	lines      []string
 }
 
 func NewEditor() *Editor {
@@ -34,28 +33,41 @@ func NewEditor() *Editor {
 	e.SetRegions(true)
 	e.SetDynamicColors(true)
 	e.SetInputCapture(e.handleInput)
-	e.Highlight("cursor")
-	e.cursorX = -1
-	e.cursorY = -1
-	e.cursorIndex = 0
+	e.Highlight("selection")
 	return e
 }
 
 func (e *Editor) Draw(screen tcell.Screen) {
 	e.TextView.Draw(screen)
-	ix, iy, _, _ := e.GetInnerRect()
-	if e.cursorX == -1 && e.cursorY == -1 {
-		e.cursorX, e.cursorY = ix, iy
+	ix, iy, w, h := e.TextView.GetInnerRect()
+	set := false
+	for wx := 0; wx < w; wx++ {
+		x := ix + wx
+		for hy := 0; hy < h; hy++ {
+			y := iy + hy
+			mainc, combc, style, _ := screen.GetContent(x, y)
+			if _, _, attr := style.Decompose(); tcell.AttrDim&attr == tcell.AttrDim {
+				screen.ShowCursor(x, y)
+				screen.SetContent(x, y, mainc, combc, style.Dim(false))
+				set = true
+				break
+			}
+		}
+		if set {
+			break
+		}
 	}
-	screen.ShowCursor(e.cursorX, e.cursorY)
-	e.SetTitle(e.GetHighlights()[0])
 }
 
 func (e *Editor) SetText(text string) {
-	if strings.Index(text, cursor) == -1 {
-		text += selTag + curTag + cursor + endTag + endTag
+	if len(e.TextView.GetRegionText("cursor")) == 0 {
+		text = lTag + text + endTag + selTag + curTag + blink(cursor) + endTag + endTag + rTag + endTag
 	}
 	e.TextView.SetText(text)
+}
+
+func (e *Editor) SetTitle(text string) {
+	e.TextView.SetTitle(text)
 }
 
 func (e *Editor) AddHandler(handler handlerFunc) {
@@ -74,6 +86,12 @@ func (e *Editor) SetSelectable(selectable bool) {
 	e.selectable = selectable
 }
 
+func (e *Editor) GetEditorText() string {
+	return e.TextView.GetRegionText("left") +
+		strings.Replace(e.TextView.GetRegionText("selection"), cursor, "", -1) +
+		e.TextView.GetRegionText("right")
+}
+
 func (e *Editor) handleInput(event *tcell.EventKey) *tcell.EventKey {
 	for _, handler := range e.handlers {
 		event = handler(event)
@@ -84,13 +102,9 @@ func (e *Editor) handleInput(event *tcell.EventKey) *tcell.EventKey {
 
 	switch event.Key() {
 	case tcell.KeyRune:
-		e.TextView.SetText(e.TextView.GetText(true) + string(event.Rune()))
-		e.cursorX++
-		x, _, width, _ := e.GetInnerRect()
-		if e.cursorX >= x+width {
-			e.cursorX = x
-			e.cursorY++
-		}
+		e.insertString(string(event.Rune()))
+	case tcell.KeyEnter:
+		e.insertString("\n")
 	case tcell.KeyUp, tcell.KeyDown, tcell.KeyRight, tcell.KeyHome, tcell.KeyEnd, tcell.KeyPgUp, tcell.KeyPgDn:
 		e.handleMovement(event)
 	case tcell.KeyBackspace:
@@ -99,6 +113,14 @@ func (e *Editor) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		e.del(1)
 	}
 	return event
+}
+
+// insertString inserts a string into the text buffer at the point of the
+// cursor. If there is any text selected, the seelection is removed.
+func (e *Editor) insertString(toAppend string) {
+	e.SetText(lTag + e.TextView.GetRegionText("left") + toAppend + endTag +
+		selTag + curTag + blink(cursor) + endTag + endTag +
+		rTag + e.TextView.GetRegionText("right") + endTag)
 }
 
 func (e *Editor) handleMovement(event *tcell.EventKey) {
@@ -138,4 +160,8 @@ func (e *Editor) page(direction int, selecting bool) {
 }
 
 func (e *Editor) del(direction int) {
+}
+
+func blink(c string) string {
+	return "[::d]" + c + "[::-]"
 }
