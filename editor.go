@@ -61,7 +61,7 @@ func (e *Editor) Draw(screen tcell.Screen) {
 
 func (e *Editor) SetText(text string) {
 	if len(e.TextView.GetRegionText("cursor")) == 0 {
-		text = lTag + text + endTag + selTag + curTag + blink(cursor) + endTag + endTag + rTag + endTag
+		text = lTag + tview.Escape(text) + endTag + selTag + curTag + blink(cursor) + endTag + endTag + rTag + endTag
 	}
 	e.TextView.SetText(text)
 }
@@ -118,9 +118,9 @@ func (e *Editor) handleInput(event *tcell.EventKey) *tcell.EventKey {
 // insertString inserts a string into the text buffer at the point of the
 // cursor. If there is any text selected, the seelection is removed.
 func (e *Editor) insertString(toAppend string) {
-	e.SetText(lTag + e.TextView.GetRegionText("left") + toAppend + endTag +
-		selTag + curTag + blink(cursor) + endTag + endTag +
-		rTag + e.TextView.GetRegionText("right") + endTag)
+	e.SetText(lTag + tview.Escape(e.TextView.GetRegionText("left")+toAppend) + endTag +
+		selTag + tview.Escape(e.TextView.GetRegionText("selection")) + curTag + blink(cursor) + endTag + endTag +
+		rTag + tview.Escape(e.TextView.GetRegionText("right")) + endTag)
 }
 
 func (e *Editor) handleMovement(event *tcell.EventKey) {
