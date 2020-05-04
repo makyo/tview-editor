@@ -107,9 +107,9 @@ func (e *Editor) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		e.insertString("\n")
 	case tcell.KeyUp, tcell.KeyDown, tcell.KeyRight, tcell.KeyHome, tcell.KeyEnd, tcell.KeyPgUp, tcell.KeyPgDn:
 		e.handleMovement(event)
-	case tcell.KeyBackspace:
+	case tcell.KeyBS:
 		e.del(-1)
-	case tcell.KeyDelete:
+	case tcell.KeyDEL:
 		e.del(1)
 	}
 	return event
@@ -126,27 +126,27 @@ func (e *Editor) insertString(toAppend string) {
 func (e *Editor) handleMovement(event *tcell.EventKey) {
 	switch event.Key() {
 	case tcell.KeyUp:
-		e.moveCursorRelative(0, -1, event.Modifiers() == tcell.ModCtrl)
+		e.moveCursorRelative(0, -1, shift(event))
 	case tcell.KeyDown:
-		e.moveCursorRelative(0, 1, event.Modifiers() == tcell.ModCtrl)
+		e.moveCursorRelative(0, 1, shift(event))
 	case tcell.KeyLeft:
-		e.moveCursorRelative(-1, 0, event.Modifiers() == tcell.ModCtrl)
+		e.moveCursorRelative(-1, 0, shift(event))
 	case tcell.KeyRight:
-		e.moveCursorRelative(1, 0, event.Modifiers() == tcell.ModCtrl)
+		e.moveCursorRelative(1, 0, shift(event))
 	case tcell.KeyHome:
-		if event.Modifiers() == tcell.ModCtrl {
-			e.moveCursorAbsolute(-1, -1, true, true, event.Modifiers() == tcell.ModCtrl)
+		if ctrl(event) {
+			e.moveCursorAbsolute(-1, -1, true, true, shift(event))
 		}
-		e.moveCursorAbsolute(0, -1, true, false, event.Modifiers() == tcell.ModCtrl)
+		e.moveCursorAbsolute(0, -1, true, false, shift(event))
 	case tcell.KeyEnd:
 		if event.Modifiers() == tcell.ModCtrl {
-			e.moveCursorAbsolute(0, 0, true, true, event.Modifiers() == tcell.ModCtrl)
+			e.moveCursorAbsolute(0, 0, true, true, shift(event))
 		}
-		e.moveCursorAbsolute(-1, 0, true, false, event.Modifiers() == tcell.ModCtrl)
+		e.moveCursorAbsolute(-1, 0, true, false, shift(event))
 	case tcell.KeyPgUp:
-		e.page(-1, event.Modifiers() == tcell.ModCtrl)
+		e.page(-1, shift(event))
 	case tcell.KeyPgDn:
-		e.page(1, event.Modifiers() == tcell.ModCtrl)
+		e.page(1, shift(event))
 	}
 }
 
@@ -160,8 +160,31 @@ func (e *Editor) page(direction int, selecting bool) {
 }
 
 func (e *Editor) del(direction int) {
+	left := tview.Escape(e.TextView.GetRegionText("left"))
+	selected := tview.Escape(e.TextView.GetRegionText("selection"))
+	right := tview.Escape(e.TextView.GetRegionText("right"))
+	if len(selected) <= 1 {
+		if direction > 0 && len(right) > 0 {
+			panic("DEL")
+			right = right[1:]
+		} else if direction < 0 && len(left) > 0 {
+			panic("BS")
+			left = left[0 : len(left)-1]
+		}
+	}
+	e.SetText(lTag + left + endTag +
+		selTag + curTag + blink(cursor) + endTag + endTag +
+		rTag + right + endTag)
 }
 
 func blink(c string) string {
 	return "[::d]" + c + "[::-]"
+}
+
+func shift(event *tcell.EventKey) bool {
+	return tcell.ModShift&event.Modifiers() == tcell.ModShift
+}
+
+func ctrl(event *tcell.EventKey) bool {
+	return tcell.ModCtrl&event.Modifiers() == tcell.ModCtrl
 }
